@@ -3,5 +3,7 @@ authors = ["Matt Kelly <matthew.joseph.kelly@gmail.com>"]
 edition = "2018"
 name = "traceroute-rs"
 version = "0.1.0"
+
 [dependencies]
-pnet = "*"
+smoltcp = "0.5"
+#smoltcp = { version = "0.5", default-features = false, features = ["std", "log", "verbose", "proto-ipv4"] }
