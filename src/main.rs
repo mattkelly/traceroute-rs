@@ -1,43 +1,60 @@
-use smoltcp::socket::SocketSet;
-use smoltcp::socket::{IcmpEndpoint, IcmpPacketMetadata, IcmpSocket, IcmpSocketBuffer};
-use smoltcp::socket::{UdpPacketMetadata, UdpSocket, UdpSocketBuffer};
-
-use smoltcp::wire::{IpAddress, Ipv4Address};
-
-use smoltcp::wire::{IpEndpoint, IpProtocol, IpRepr, UdpRepr};
+use pnet::datalink::Channel::Ethernet;
+use pnet::datalink::{self, NetworkInterface};
+use pnet::packet::icmp::{IcmpPacket, IcmpTypes};
+use std::net::UdpSocket;
 
 use std::{thread, time};
 
 fn main() -> std::io::Result<()> {
-    let udp_rx_buffer = UdpSocketBuffer::new(vec![UdpPacketMetadata::EMPTY], vec![0; 256]);
-    let udp_tx_buffer = UdpSocketBuffer::new(vec![UdpPacketMetadata::EMPTY], vec![0; 256]);
-    let mut udp_socket = UdpSocket::new(udp_rx_buffer, udp_tx_buffer);
-
-    let icmp_rx_buffer = IcmpSocketBuffer::new(vec![IcmpPacketMetadata::EMPTY], vec![0; 256]);
-    let icmp_tx_buffer = IcmpSocketBuffer::new(vec![IcmpPacketMetadata::EMPTY], vec![0; 256]);
-    let icmp_socket = IcmpSocket::new(icmp_rx_buffer, icmp_tx_buffer);
-
-    const LOCAL_ENDPOINT: IpEndpoint = IpEndpoint {
-        addr: IpAddress::Ipv4(Ipv4Address::UNSPECIFIED),
-        port: 33333,
+    let interface = &datalink::interfaces()[5];
+    println!("interface: {:?}", interface);
+    let (_, mut rx) = match datalink::channel(&interface, Default::default()) {
+        Ok(Ethernet(tx, rx)) => (tx, rx),
+        Ok(_) => panic!("Unhandled channel type"),
+        Err(e) => panic!(
+            "An error occurred when creating the datalink channel: {}",
+            e
+        ),
     };
 
-    udp_socket
-        .bind(LOCAL_ENDPOINT)
-        .expect("binding to local endpoint");
-
     loop {
-        let endpoint: IpEndpoint = IpEndpoint {
-            addr: IpAddress::v4(8, 8, 8, 8),
-            port: 33434,
-        };
+        let socket = UdpSocket::bind("0.0.0.0:33333")?;
+        //let address = "192.168.1.1:33434";
+        let address = "google.com:33434";
 
-        udp_socket.set_hop_limit(Some(1));
+        socket.set_ttl(1)?;
 
         let buf = [0; 1];
-        udp_socket
-            .send_slice(&buf, endpoint)
-            .expect("failed to send");
+        socket.connect(address).expect("failed to connect");
+        socket.send(&buf).expect("failed to send");
+
+        match rx.next() {
+            Ok(packet) => {
+                let packet = IcmpPacket::new(packet).unwrap();
+
+                let icmp_type = packet.get_icmp_type();
+                //let checksum = packet.get_checksum();
+                //println!("icmp_type: {:?}", icmp_type);
+                //println!("checksum: {:?}", checksum);
+                match packet.get_icmp_type() {
+                    IcmpTypes::DestinationUnreachable => {
+                        println!("destination unreachable");
+                    }
+                    IcmpTypes::TimeExceeded => {
+                        println!("time exceeded");
+                    }
+                    _ => {
+                        println!("unknown icmp type: {:?}", packet.get_icmp_type());
+                    }
+                }
+                if icmp_type == IcmpTypes::DestinationUnreachable {
+                    println!("packet: {:?}", packet);
+                }
+            }
+            Err(e) => {
+                panic!("An error occurred while reading: {}", e);
+            }
+        }
 
         thread::sleep(time::Duration::from_millis(1000));
     }
