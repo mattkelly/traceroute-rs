@@ -4,4 +4,4 @@ edition = "2018"
 name = "traceroute-rs"
 version = "0.1.0"
 [dependencies]
-pnet = "*"
+pnet = "0.23.0"

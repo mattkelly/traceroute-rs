@@ -1,10 +1,15 @@
 use pnet::datalink::Channel::Ethernet;
 use pnet::datalink::{self, NetworkInterface};
+use pnet::packet::ethernet::{EtherTypes, EthernetPacket};
 use pnet::packet::icmp::{IcmpPacket, IcmpTypes};
+use pnet::packet::ipv4::Ipv4Packet;
+use pnet::packet::Packet;
+
 use std::net::UdpSocket;
 
-use std::env;
 use std::io::{self, Write};
+
+use std::env;
 use std::process;
 use std::{thread, time};
 
@@ -51,8 +56,27 @@ fn main() -> std::io::Result<()> {
 
         match rx.next() {
             Ok(packet) => {
-                let packet = IcmpPacket::new(packet).unwrap();
+                let packet = EthernetPacket::new(packet).unwrap();
 
+                match packet.get_ethertype() {
+                    EtherTypes::Ipv4 => {
+                        println!("Got IPv4 packet!");
+                        let header = Ipv4Packet::new(packet.payload());
+                        if let Some(header) = header {
+                            println!("{:?}", header);
+                        } else {
+                            println!("Malformed IPv4 packet");
+                        }
+                    }
+                    _ => println!(
+                        "Unknown packet: {} > {}; ethertype={:?}",
+                        packet.get_source(),
+                        packet.get_destination(),
+                        packet.get_ethertype(),
+                    ),
+                }
+
+                /*
                 let icmp_type = packet.get_icmp_type();
                 //let checksum = packet.get_checksum();
                 //println!("icmp_type: {:?}", icmp_type);
@@ -71,6 +95,7 @@ fn main() -> std::io::Result<()> {
                 if icmp_type == IcmpTypes::DestinationUnreachable {
                     println!("packet: {:?}", packet);
                 }
+                */
             }
             Err(e) => {
                 panic!("An error occurred while reading: {}", e);
