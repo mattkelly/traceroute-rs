@@ -3,11 +3,32 @@ use pnet::datalink::{self, NetworkInterface};
 use pnet::packet::icmp::{IcmpPacket, IcmpTypes};
 use std::net::UdpSocket;
 
+use std::env;
+use std::io::{self, Write};
+use std::process;
 use std::{thread, time};
 
 fn main() -> std::io::Result<()> {
-    let interface = &datalink::interfaces()[5];
+    // TODO use a real argument parser
+    let iface_name = match env::args().nth(1) {
+        Some(n) => n,
+        None => {
+            writeln!(io::stderr(), "USAGE: traceroute-rs <interface>").unwrap();
+            process::exit(1);
+        }
+    };
+
+    let interface_name_match = |iface: &NetworkInterface| iface.name == iface_name;
+
+    let interfaces = datalink::interfaces();
+    let interface = interfaces
+        .into_iter()
+        .filter(interface_name_match)
+        .next()
+        .unwrap();
+
     println!("interface: {:?}", interface);
+
     let (_, mut rx) = match datalink::channel(&interface, Default::default()) {
         Ok(Ethernet(tx, rx)) => (tx, rx),
         Ok(_) => panic!("Unhandled channel type"),
